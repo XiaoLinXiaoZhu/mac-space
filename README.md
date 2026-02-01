@@ -1,136 +1,88 @@
-## MacSpaces - Windows 虚拟桌面空间化体验工具
+# MacSpaces
 
-### 项目企划书
+**在 Windows 上复现 Mac 的空间化桌面体验**
 
----
+将 Windows 虚拟桌面变成 Mac 风格的"空间"——每个全屏应用独占一个空间，左右滑动切换，关闭时自动清理。
 
-#### 1. 项目背景与动机
+## ✨ 功能
 
-**问题**：Windows 的窗口切换逻辑（Alt+Tab）基于「时间序列」（最近使用排前），而非「空间序列」（固定位置）。这导致：
-- 无法建立空间直觉（"VSCode 在 Chrome 左边"）
-- 每次切换都要视觉确认
-- 3-4 个应用时认知负担剧增
+| 快捷键 | 功能 |
+|--------|------|
+| `Win+F` | 将当前窗口移到新空间并全屏（再按一次退出） |
+| `Win+←` | 切换到左边的空间（带动画） |
+| `Win+→` | 切换到右边的空间（带动画） |
 
-**Mac 的解决方案**：
-- 应用全屏时自动创建独立空间
-- 空间位置固定，支持左右滑动切换
-- 退出全屏时自动合并空间
-- 任务栏隐藏，完全沉浸
+### 核心体验
 
-**目标**：在 Windows 上复现 Mac 的空间化桌面体验。
+- **一键全屏**：`Win+F` 创建独立空间，窗口自动全屏（F11）
+- **一键退出**：再按 `Win+F` 返回原桌面，空间自动删除
+- **自动清理**：关闭全屏窗口时，对应空间自动删除
+- **带动画切换**：与系统原生 `Win+Ctrl+←/→` 体验一致
 
----
+## 🚀 快速开始
 
-#### 2. 核心需求
+### 1. 安装 AutoHotkey v2
 
-| 优先级 | 功能 | 描述 |
-|--------|------|------|
-| P0 | 空间切换 | Win+←/→ 在虚拟桌面间切换（替代默认分屏） |
-| P0 | 快速全屏 | Win+F 将当前窗口移到新桌面并最大化 |
-| P1 | 自动清理 | 关闭窗口后自动删除空桌面 |
-| P2 | 空间指示器 | 显示当前处于第几个空间（类似 Mac 顶部小点） |
-| P2 | 窗口移动 | Win+Shift+←/→ 将窗口移到相邻桌面 |
-| P3 | 触控板手势 | 三指滑动切换空间（依赖 Windows 原生支持） |
+从 [AutoHotkey 官网](https://www.autohotkey.com/) 下载并安装 v2 版本。
 
----
+### 2. 下载 VirtualDesktopAccessor.dll
 
-#### 3. 技术方案
+从 [VirtualDesktopAccessor Releases](https://github.com/Ciantic/VirtualDesktopAccessor/releases) 下载最新版本，放入 `assets/` 目录。
 
-**核心技术栈**：
-- AutoHotkey v2（脚本语言）
-- VirtualDesktopAccessor.dll（Windows 虚拟桌面 API 封装）
+### 3. 运行
 
-**架构设计**：
-```
-┌─────────────────────────────────────────────┐
-│                 MacSpaces                    │
-├─────────────────────────────────────────────┤
-│  Hotkey Layer        快捷键绑定与事件处理    │
-├─────────────────────────────────────────────┤
-│  Desktop Manager     桌面创建/删除/切换逻辑  │
-├─────────────────────────────────────────────┤
-│  Window Tracker      窗口-桌面映射状态管理   │
-├─────────────────────────────────────────────┤
-│  VirtualDesktopAccessor.dll  Windows API    │
-└─────────────────────────────────────────────┘
-```
+双击 `mac-spaces.ahk` 启动。
 
-**关键文件**：
+## 📁 项目结构
+
 ```
 mac-spaces/
-├── README.md              # 项目说明
-├── CHANGELOG.md           # 版本记录
-├── mac-spaces.ahk         # 主脚本（入口）
+├── mac-spaces.ahk          # 主脚本
 ├── lib/
-│   ├── desktop.ahk        # 桌面管理模块
-│   ├── window.ahk         # 窗口操作模块
-│   └── config.ahk         # 配置与常量
+│   ├── config.ahk          # 配置
+│   ├── desktop.ahk         # 桌面 API
+│   ├── window.ahk          # 窗口操作
+│   ├── registry.ahk        # 空间注册表
+│   └── hooks.ahk           # 事件监听
 ├── assets/
 │   └── VirtualDesktopAccessor.dll
 └── docs/
-    └── TECHNICAL.md       # 技术细节文档
+    └── TECHNICAL.md        # 技术文档
 ```
 
----
+## ⚙️ 配置
 
-#### 4. 风险与应对
+编辑 `lib/config.ahk` 可自定义：
 
-| 风险 | 等级 | 应对策略 |
-|------|------|----------|
-| Windows 大版本更新导致 API 失效 | 🔴 高 | 关注 VirtualDesktopAccessor 项目更新，及时替换 DLL |
-| 与其他快捷键工具冲突 | 🟡 中 | 提供配置选项，允许用户自定义快捷键 |
-| UWP 应用行为不一致 | 🟡 中 | 针对 ApplicationFrameHost.exe 特殊处理 |
-| 多显示器支持 | 🟡 中 | MVP 阶段仅支持主显示器，后续迭代增强 |
-
----
-
-#### 5. 开发路线图
-
-**Phase 1 - MVP（1-2 天）**
-- [ ] 搭建项目结构
-- [ ] 集成 VirtualDesktopAccessor.dll
-- [ ] 实现 Win+←/→ 切换桌面
-- [ ] 实现 Win+F 全屏到新桌面
-
-**Phase 2 - 核心功能（3-5 天）**
-- [ ] 实现窗口-桌面映射追踪
-- [ ] 实现关闭窗口时自动删除空桌面
-- [ ] 实现 Win+Shift+←/→ 移动窗口
-- [ ] 添加托盘图标与基础配置
-
-**Phase 3 - 体验优化（1 周）**
-- [ ] 添加空间指示器 UI
-- [ ] 支持配置文件自定义快捷键
-- [ ] 多显示器支持
-- [ ] 性能优化与稳定性测试
-
----
-
-#### 6. 依赖项
-
-| 依赖 | 版本 | 用途 | 许可证 |
-|------|------|------|--------|
-| AutoHotkey | v2.0+ | 脚本运行环境 | GPL |
-| VirtualDesktopAccessor | 最新 | Windows 虚拟桌面 API | MIT |
-
----
-
-#### 7. 快速开始（预期）
-
-```powershell
-# 1. 克隆项目
-git clone https://github.com/yourname/mac-spaces.git
-
-# 2. 下载依赖
-# 从 https://github.com/Ciantic/VirtualDesktopAccessor/releases 下载 DLL
-# 放入 assets/ 目录
-
-# 3. 运行
-# 双击 mac-spaces.ahk 或右键以管理员身份运行
+```autohotkey
+class Config {
+    static SwitchDelay := 150      ; 切换延迟（毫秒）
+    static CyclicSwitch := false   ; 是否循环切换
+    static Debug := false          ; 调试模式
+}
 ```
 
----
+## 🔧 托盘菜单
 
-这份企划书涵盖了项目的动机、需求、技术方案和开发路线图。你可以将它保存为新工作区的 `README.md` 或 `PLAN.md`，然后基于此开始开发。
+右键系统托盘图标：
 
-需要我在你指定的位置创建这个项目结构吗？
+- **桌面信息**：查看当前桌面数量和索引
+- **空间注册表**：查看所有全屏空间
+- **调试模式**：启用详细提示
+- **重新加载**：重启脚本
+- **退出**：关闭程序
+
+## ⚠️ 注意事项
+
+- 需要 Windows 10/11
+- VirtualDesktopAccessor.dll 版本需与 Windows 版本兼容
+- F11 全屏依赖应用支持（浏览器、VSCode 等大多支持）
+
+## 📄 许可证
+
+MIT
+
+## 🙏 致谢
+
+- [VirtualDesktopAccessor](https://github.com/Ciantic/VirtualDesktopAccessor) - Windows 虚拟桌面 API
+- [AutoHotkey](https://www.autohotkey.com/) - 脚本运行环境
