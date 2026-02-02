@@ -4,9 +4,14 @@
 #Requires AutoHotkey v2.0
 
 class WindowHelper {
-    ; 获取当前活动窗口句柄
+    ; 获取当前活动窗口句柄（安全版本）
     static GetActive() {
-        return WinGetID("A")
+        try {
+            hwnd := WinGetID("A")
+            return hwnd
+        } catch {
+            return 0
+        }
     }
     
     ; 获取窗口类名
@@ -48,27 +53,32 @@ class WindowHelper {
     
     ; 检查窗口是否有效（可操作）
     static IsValid(hwnd) {
+        ; 检查句柄是否有效
         if !hwnd {
             return false
         }
         
-        ; 检查窗口是否存在
-        if !WinExist(hwnd) {
+        try {
+            ; 检查窗口是否存在
+            if !WinExist(hwnd) {
+                return false
+            }
+            
+            ; 排除桌面窗口
+            className := this.GetClass(hwnd)
+            if className = "Progman" || className = "WorkerW" {
+                return false
+            }
+            
+            ; 排除任务栏
+            if className = "Shell_TrayWnd" || className = "Shell_SecondaryTrayWnd" {
+                return false
+            }
+            
+            return true
+        } catch {
             return false
         }
-        
-        ; 排除桌面窗口
-        className := this.GetClass(hwnd)
-        if className = "Progman" || className = "WorkerW" {
-            return false
-        }
-        
-        ; 排除任务栏
-        if className = "Shell_TrayWnd" || className = "Shell_SecondaryTrayWnd" {
-            return false
-        }
-        
-        return true
     }
     
     ; 最大化窗口

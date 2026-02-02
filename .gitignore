@@ -1,0 +1,15 @@
+# Rust 编译输出
+mac-spaces-rs/target/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
