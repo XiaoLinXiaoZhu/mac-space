@@ -18,7 +18,7 @@ mod vda;
 mod window;
 
 use anyhow::Result;
-use hotkey::HotkeyEvent;
+use hotkey::{HotkeyEvent, HotkeyManager, WM_HOTKEY_EVENT};
 use hooks::WindowEvent;
 use muda::MenuEvent;
 use registry::SpaceRegistry;
@@ -26,18 +26,17 @@ use single_instance::SingleInstance;
 use std::env;
 use std::path::PathBuf;
 use std::sync::mpsc;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 use tracing_subscriber::EnvFilter;
 use vda::VirtualDesktopAccessor;
+use windows::core::PCWSTR;
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    DispatchMessageW, GetMessageW, TranslateMessage, MSG,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW,
+    RegisterClassW, TranslateMessage, CS_HREDRAW, CS_VREDRAW,
+    CW_USEDEFAULT, MSG, WINDOW_EX_STYLE, WM_DESTROY, WNDCLASSW, WS_OVERLAPPED,
 };
-
-/// 应用事件
-enum AppEvent {
-    Hotkey(HotkeyEvent),
-    Window(WindowEvent),
-}
 
 fn main() -> Result<()> {
     // 初始化日志
@@ -68,9 +67,12 @@ fn main() -> Result<()> {
     // 创建空间注册表
     let mut registry = SpaceRegistry::new();
     
-    // 创建快捷键事件通道
-    let (hotkey_tx, hotkey_rx) = mpsc::channel::<HotkeyEvent>();
-    let _hotkey_manager = hotkey::HotkeyManager::new(hotkey_tx)?;
+    // 创建消息窗口（用于接收钩子线程的 PostMessage）
+    let main_hwnd = create_message_window()?;
+    info!("消息窗口已创建: {:?}", main_hwnd);
+    
+    // 设置快捷键钩子（在独立线程中运行）
+    let _hotkey_manager = HotkeyManager::new(main_hwnd);
     
     // 设置窗口事件钩子
     let (window_tx, window_rx) = mpsc::channel();
@@ -87,24 +89,25 @@ fn main() -> Result<()> {
         let mut msg = MSG::default();
         
         loop {
-            // 非阻塞检查消息
-            let has_msg = GetMessageW(&mut msg, None, 0, 0).as_bool();
+            let ret = GetMessageW(&mut msg, None, 0, 0);
             
-            if !has_msg {
+            if !ret.as_bool() {
                 break;
             }
             
-            // 处理快捷键事件
-            while let Ok(event) = hotkey_rx.try_recv() {
-                match event {
-                    HotkeyEvent::SwitchLeft => {
-                        desktop::switch_left(&vda);
-                    }
-                    HotkeyEvent::SwitchRight => {
-                        desktop::switch_right(&vda);
-                    }
-                    HotkeyEvent::ToggleFullscreen => {
-                        desktop::toggle_fullscreen(&vda, &mut registry);
+            // 处理自定义快捷键消息
+            if msg.message == WM_HOTKEY_EVENT {
+                if let Some(event) = HotkeyEvent::from_wparam(msg.wParam.0) {
+                    match event {
+                        HotkeyEvent::SwitchLeft => {
+                            desktop::switch_left(&vda);
+                        }
+                        HotkeyEvent::SwitchRight => {
+                            desktop::switch_right(&vda);
+                        }
+                        HotkeyEvent::ToggleFullscreen => {
+                            desktop::toggle_fullscreen(&vda, &mut registry);
+                        }
                     }
                 }
             }
@@ -132,13 +135,71 @@ fn main() -> Result<()> {
                 }
             }
             
-            TranslateMessage(&msg);
+            let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
     }
     
     info!("MacSpaces 退出");
     Ok(())
+}
+
+/// 创建消息窗口（隐藏窗口，仅用于接收消息）
+fn create_message_window() -> Result<HWND> {
+    unsafe {
+        let instance = GetModuleHandleW(None)?;
+        
+        // 注册窗口类
+        let class_name = wide_string("MacSpacesMessageWindow");
+        
+        let wc = WNDCLASSW {
+            style: CS_HREDRAW | CS_VREDRAW,
+            lpfnWndProc: Some(message_window_proc),
+            hInstance: instance.into(),
+            lpszClassName: PCWSTR(class_name.as_ptr()),
+            ..Default::default()
+        };
+        
+        RegisterClassW(&wc);
+        
+        // 创建隐藏窗口
+        let hwnd = CreateWindowExW(
+            WINDOW_EX_STYLE::default(),
+            PCWSTR(class_name.as_ptr()),
+            PCWSTR::null(),
+            WS_OVERLAPPED,
+            CW_USEDEFAULT,
+            CW_USEDEFAULT,
+            0,
+            0,
+            None,
+            None,
+            instance,
+            None,
+        )?;
+        
+        Ok(hwnd)
+    }
+}
+
+/// 消息窗口过程
+unsafe extern "system" fn message_window_proc(
+    hwnd: HWND,
+    msg: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+) -> LRESULT {
+    match msg {
+        WM_DESTROY => {
+            LRESULT(0)
+        }
+        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    }
+}
+
+/// 转换为宽字符串
+fn wide_string(s: &str) -> Vec<u16> {
+    s.encode_utf16().chain(std::iter::once(0)).collect()
 }
 
 /// 获取 DLL 路径
@@ -183,11 +244,10 @@ fn show_registry_info(registry: &SpaceRegistry) {
 
 /// 显示消息框
 fn show_message_box(title: &str, message: &str) {
-    use windows::core::PCWSTR;
     use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONINFORMATION, MB_OK};
     
-    let title_wide: Vec<u16> = title.encode_utf16().chain(std::iter::once(0)).collect();
-    let msg_wide: Vec<u16> = message.encode_utf16().chain(std::iter::once(0)).collect();
+    let title_wide = wide_string(title);
+    let msg_wide = wide_string(message);
     
     unsafe {
         MessageBoxW(
