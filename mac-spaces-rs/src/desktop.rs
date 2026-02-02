@@ -16,6 +16,18 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 /// 切换延迟（等待动画完成）
 const SWITCH_DELAY_MS: u64 = 150;
 
+/// 检查是否可以向左切换
+pub fn can_switch_left(vda: &VirtualDesktopAccessor) -> bool {
+    vda.get_current_desktop() > 0
+}
+
+/// 检查是否可以向右切换
+pub fn can_switch_right(vda: &VirtualDesktopAccessor) -> bool {
+    let current = vda.get_current_desktop();
+    let count = vda.get_desktop_count();
+    current < count - 1
+}
+
 /// 切换到左边的桌面
 pub fn switch_left(vda: &VirtualDesktopAccessor) -> bool {
     let current = vda.get_current_desktop();

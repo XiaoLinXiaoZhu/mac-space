@@ -9,6 +9,7 @@
 
 #![windows_subsystem = "windows"]
 
+mod animation;
 mod desktop;
 mod hooks;
 mod hotkey;
@@ -18,6 +19,7 @@ mod vda;
 mod window;
 
 use anyhow::Result;
+use animation::{AnimationOverlay, Direction};
 use hotkey::{HotkeyEvent, HotkeyManager, WM_HOTKEY_EVENT};
 use hooks::WindowEvent;
 use muda::MenuEvent;
@@ -67,6 +69,9 @@ fn main() -> Result<()> {
     // 创建空间注册表
     let mut registry = SpaceRegistry::new();
     
+    // 创建动画管理器
+    let mut animator = AnimationOverlay::new();
+    
     // 创建消息窗口（用于接收钩子线程的 PostMessage）
     let main_hwnd = create_message_window()?;
     info!("消息窗口已创建: {:?}", main_hwnd);
@@ -100,10 +105,20 @@ fn main() -> Result<()> {
                 if let Some(event) = HotkeyEvent::from_wparam(msg.wParam.0) {
                     match event {
                         HotkeyEvent::SwitchLeft => {
-                            desktop::switch_left(&vda);
+                            // 先检查是否可以切换
+                            if desktop::can_switch_left(&vda) {
+                                animator.play(Direction::Left, || {
+                                    desktop::switch_left(&vda);
+                                });
+                            }
                         }
                         HotkeyEvent::SwitchRight => {
-                            desktop::switch_right(&vda);
+                            // 先检查是否可以切换
+                            if desktop::can_switch_right(&vda) {
+                                animator.play(Direction::Right, || {
+                                    desktop::switch_right(&vda);
+                                });
+                            }
                         }
                         HotkeyEvent::ToggleFullscreen => {
                             desktop::toggle_fullscreen(&vda, &mut registry);
