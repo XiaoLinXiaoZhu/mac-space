@@ -9,7 +9,9 @@ use std::thread;
 use std::time::Duration;
 use tracing::{debug, info, warn};
 use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::Input::KeyboardAndMouse::{SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_F11};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_F11,
+};
 
 /// 切换延迟（等待动画完成）
 const SWITCH_DELAY_MS: u64 = 150;
