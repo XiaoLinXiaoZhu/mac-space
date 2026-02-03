@@ -6,13 +6,14 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread::{self, JoinHandle};
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, VK_LEFT, VK_RIGHT, VK_LWIN, VK_RWIN,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetMessageW, PostMessageW,
+    CallNextHookEx, DispatchMessageW, GetMessageW, PostMessageW, PostThreadMessageW,
     SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx,
-    HHOOK, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_USER,
+    KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WM_KEYDOWN, WM_QUIT, WM_USER,
 };
 use tracing::{debug, trace};
 
@@ -44,6 +45,7 @@ impl HotkeyEvent {
 
 // 全局状态（用于钩子回调）
 static mut MAIN_HWND: HWND = HWND(std::ptr::null_mut());
+static mut HOOK_THREAD_ID: u32 = 0;
 static HOOK_ACTIVE: AtomicBool = AtomicBool::new(false);
 
 /// 快捷键管理器
@@ -79,7 +81,11 @@ impl Drop for HotkeyManager {
         
         // 发送退出消息给钩子线程
         // 注意：钩子线程有自己的消息循环，需要通过 PostThreadMessage 退出
-        // 但这里简单处理，让线程自然退出
+        unsafe {
+            if HOOK_THREAD_ID != 0 {
+                let _ = PostThreadMessageW(HOOK_THREAD_ID, WM_QUIT, WPARAM(0), LPARAM(0));
+            }
+        }
         
         if let Some(handle) = self.thread_handle.take() {
             // 等待线程结束（最多 1 秒）
@@ -93,6 +99,9 @@ impl Drop for HotkeyManager {
 /// 钩子线程主函数
 fn run_hook_thread() {
     unsafe {
+        // 获取并保存当前线程 ID
+        HOOK_THREAD_ID = GetCurrentThreadId();
+        
         // 安装低级键盘钩子
         let hook = match SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), None, 0) {
             Ok(h) => h,
